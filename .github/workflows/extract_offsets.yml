@@ -1,0 +1,43 @@
+name: 提取内核偏移量
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - boot.img
+      - auto_extract_offsets.py
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 安装系统依赖
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3 python3-pip wget unzip
+
+    - name: 安装 Python 依赖
+      run: pip3 install vmlinux-to-elf
+
+    - name: 检查 boot.img 是否存在
+      run: |
+        if [ ! -f boot.img ]; then echo "错误：根目录下未找到 boot.img。"; exit 1; fi
+        echo "boot.img 已找到，大小：$(du -h boot.img | cut -f1)"
+
+    - name: 创建目标文件夹并运行偏移提取脚本
+      run: |
+        mkdir -p target
+        python3 auto_extract_offsets.py boot.img -o . --device blazer --target-name target --keep-intermediate
+
+    - name: 验证并上传 target.h
+      run: |
+        if [ ! -f target/target.h ]; then echo "错误：target.h 未生成"; exit 1; fi
+      uses: actions/upload-artifact@v4
+      with:
+        name: target-h
+        path: target/target.h
+        if-no-files-found: error
