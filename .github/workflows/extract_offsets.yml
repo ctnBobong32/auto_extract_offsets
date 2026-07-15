@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - boot.img
       - auto_extract_offsets.py
 
 jobs:
@@ -16,28 +15,33 @@ jobs:
       uses: actions/checkout@v4
 
     - name: 安装系统依赖
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y python3 python3-pip wget unzip
+      run: sudo apt-get update && sudo apt-get install -y python3 python3-pip wget unzip
 
     - name: 安装 Python 依赖
       run: pip3 install vmlinux-to-elf
 
-    - name: 检查 boot.img 是否存在
+    - name: 从远程下载 boot.img
       run: |
-        if [ ! -f boot.img ]; then echo "错误：根目录下未找到 boot.img。"; exit 1; fi
-        echo "boot.img 已找到，大小：$(du -h boot.img | cut -f1)"
+        wget -q --show-progress https://r2.262832.xyz/raw/boot/boot.img -O boot.img
+        if [ ! -f boot.img ]; then
+          echo "错误：boot.img 下载失败"
+          exit 1
+        fi
+        echo "boot.img 下载成功，大小：$(du -h boot.img | cut -f1)"
 
-    - name: 创建目标文件夹并运行偏移提取脚本
+    - name: 运行偏移提取脚本并移动 target.h 到根目录
       run: |
-        mkdir -p target
         python3 auto_extract_offsets.py boot.img -o . --device blazer --target-name target --keep-intermediate
+        if [ -f target/target.h ]; then
+          mv target/target.h ./target.h
+        else
+          echo "错误：target.h 未生成"
+          exit 1
+        fi
 
-    - name: 验证并上传 target.h
-      run: |
-        if [ ! -f target/target.h ]; then echo "错误：target.h 未生成"; exit 1; fi
+    - name: 上传 target.h 作为 Artifact
       uses: actions/upload-artifact@v4
       with:
         name: target-h
-        path: target/target.h
+        path: target.h
         if-no-files-found: error
